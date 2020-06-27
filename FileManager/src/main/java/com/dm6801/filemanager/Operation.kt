@@ -9,11 +9,11 @@ import kotlin.properties.Delegates
 
 data class Operation(
     val type: Type,
-    val files: List<String>?,
+    val paths: List<String>?,
     var destinationPath: String?
 ) {
     enum class Type {
-        Create, Copy, Move, Delete
+        CreateFile, CreateFolder, Copy, Move, Delete
     }
 
     private var observers: MutableList<Observer<Boolean>> = mutableListOf()
@@ -36,8 +36,8 @@ data class Operation(
         if (isExecuted) return
         CoroutineScope(Dispatchers.IO).safeLaunch {
             when (type) {
-                Type.Create -> {
-                    files?.forEach { path ->
+                Type.CreateFile -> {
+                    paths?.forEach { path ->
                         val file = File(path).ensurePathExists()
                         try {
                             if (!file.exists()) {
@@ -59,24 +59,64 @@ data class Operation(
                         }
                     }
                 }
-                Type.Copy -> { //TODO
+                Type.CreateFolder -> {
+                    paths?.forEach { path ->
+                        val file = File(path).ensurePathExists()
+                        try {
+                            if (!file.exists()) {
+                                file.mkdirs()
+                            } else {
+                                val newPath = onFileExists?.invoke(file.name)
+                                if (newPath != null) { //rename
+                                    val newFile = File(file.parent, newPath)
+                                    newFile.mkdirs()
+                                } else { //overwrite
+                                    file.delete()
+                                    file.mkdirs()
+                                }
+                            }
+                            isExecuted = true
+                        } catch (t: Throwable) {
+                            t.printStackTrace()
+                            isExecuted = false
+                        }
+                    }
+                }
+                Type.Copy -> {
                     val destPath = destinationPath ?: return@safeLaunch
                     Log.d(javaClass.simpleName, "copy files")
-                    files?.forEach { file ->
-                        val dest = destPath + "/" + file.substringAfterLast("/")
-                        Log.d(javaClass.simpleName, "$file -> $dest")
+                    paths?.forEach { path ->
+                        val file = File(path)
+                        try {
+                            if (file.isDirectory)
+                                file.copyRecursively(File(destPath, file.name), overwrite = false)
+                            else
+                                file.copyTo(File(destPath), overwrite = false)
+                        } catch (t: Throwable) {
+                            t.printStackTrace()
+                        }
                     }
+                    isExecuted = true
                 }
-                Type.Move -> { //TODO
+                Type.Move -> {
                     val destPath = destinationPath ?: return@safeLaunch
                     Log.d(javaClass.simpleName, "move files")
-                    files?.forEach { file ->
-                        val dest = destPath + "/" + file.substringAfterLast("/")
-                        Log.d(javaClass.simpleName, "$file -> $dest")
+                    paths?.forEach { path ->
+                        val file = File(path)
+                        try {
+                            if (file.isDirectory)
+                                file.copyRecursively(File(destPath, file.name), overwrite = false)
+                            else
+                                file.copyTo(File(destPath), overwrite = false)
+                            file.delete()
+                        } catch (t: Throwable) {
+                            t.printStackTrace()
+                        }
                     }
+                    isExecuted = true
                 }
                 Type.Delete -> {
-                    files?.forEach { path ->
+                    paths?.forEach { path ->
                         try {
                             val file = File(path)
                             if (!file.exists()) return@safeLaunch

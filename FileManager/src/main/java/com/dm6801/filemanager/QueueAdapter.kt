@@ -69,7 +69,7 @@ class QueueAdapter(private val operations: OperationsManager) :
     fun submit(operation: Pair<Int, Operation>) {
         if (currentList.isNotEmpty()) return
         this.queueIndex = operation.first
-        submitList(operation.second.files?.map { SelectedItem(it) }) {
+        submitList(operation.second.paths?.map { SelectedItem(it) }) {
             recyclerView?.isVisible = currentList.isNotEmpty()
         }
     }
@@ -96,7 +96,7 @@ class QueueAdapter(private val operations: OperationsManager) :
                 queueIndex = -1
             } else {
                 operations.update(queueIndex) {
-                    apply { copy(files = files?.toMutableList()?.apply { removeAt(position) }) }
+                    apply { copy(paths = paths?.toMutableList()?.apply { removeAt(position) }) }
                 }
             }
         }

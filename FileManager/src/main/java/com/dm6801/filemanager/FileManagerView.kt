@@ -30,6 +30,7 @@ class FileManagerView @JvmOverloads constructor(
     private val menuView: LinearLayout? get() = file_manager_menu
     private val openButton: Button? get() = file_manager_menu_open
     private val deleteButton: Button? get() = file_manager_menu_delete
+    private val folderButton: Button? get() = file_manager_menu_folder
     private val createButton: Button? get() = file_manager_menu_create
     private val copyButton: Button? get() = file_manager_menu_copy
     private val cutButton: Button? get() = file_manager_menu_cut
@@ -81,6 +82,7 @@ class FileManagerView @JvmOverloads constructor(
         openButton?.setOnClickListener { pathsAdapter.openFile() }
         deleteButton?.setOnClickListener { pathsAdapter.deleteFiles() }
         createButton?.setOnClickListener { pathsAdapter.createFile() }
+        folderButton?.setOnClickListener { pathsAdapter.createFolder() }
         copyButton?.setOnClickListener { pathsAdapter.copyFiles() }
         cutButton?.setOnClickListener { pathsAdapter.moveFiles() }
         moveButton?.setOnClickListener { pathsAdapter.executeQueue() }

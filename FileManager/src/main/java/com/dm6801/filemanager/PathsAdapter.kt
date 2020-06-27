@@ -237,6 +237,10 @@ class PathsAdapter(private val operations: OperationsManager) :
         operations.create(rootPath ?: return)
     }
 
+    fun createFolder() {
+        operations.createFolder(rootPath ?: return)
+    }
+
     fun deleteFiles() {
         operations.delete(selected.map { it.path })
     }

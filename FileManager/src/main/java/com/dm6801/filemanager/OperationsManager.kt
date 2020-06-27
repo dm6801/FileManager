@@ -3,9 +3,11 @@ package com.dm6801.filemanager
 import android.content.Context
 import android.content.DialogInterface
 import android.view.Gravity
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.getSystemService
 import androidx.lifecycle.Observer
 import kotlinx.coroutines.*
 import java.io.File
@@ -28,6 +30,8 @@ class OperationsManager(private val context: Context) {
     private var onUpdate: Update? by Delegates.observable<Update?>(null) { _, _, newValue ->
         observers.forEach { it.onChanged(newValue) }
     }
+
+    private val imm: InputMethodManager? get() = context.getSystemService()
 
     fun observe(observer: Observer<Update>): OperationsManager {
         observers.add(observer)
@@ -131,14 +135,32 @@ class OperationsManager(private val context: Context) {
         if (file.isDirectory) {
             createFileDialog(path) { name ->
                 Operation(
-                    Operation.Type.Create,
+                    Operation.Type.CreateFile,
                     listOf("$path/${name ?: return@createFileDialog}"),
                     null
                 ).observe()
                     .execute()
             }
         } else {
-            Operation(Operation.Type.Create, listOf(path), null)
+            Operation(Operation.Type.CreateFile, listOf(path), null)
+                .observe()
+                .execute(onFileExists = { fileExistsDialog(it).await() })
+        }
+    }
+
+    fun createFolder(path: String) {
+        val file = File(path)
+        if (file.isDirectory) {
+            createFileDialog(path, R.string.toast_folder_exists) { name ->
+                Operation(
+                    Operation.Type.CreateFolder,
+                    listOf("$path/${name ?: return@createFileDialog}"),
+                    null
+                ).observe()
+                    .execute()
+            }
+        } else {
+            Operation(Operation.Type.CreateFolder, listOf(path), null)
                 .observe()
                 .execute(onFileExists = { fileExistsDialog(it).await() })
         }
@@ -162,7 +184,11 @@ class OperationsManager(private val context: Context) {
         }
     }
 
-    fun createFileDialog(path: String, action: (String?) -> Unit) {
+    fun createFileDialog(
+        path: String,
+        onExistMessage: Int = R.string.toast_file_exists,
+        action: (String?) -> Unit
+    ) {
         val editText = EditText(context)
         AlertDialog.Builder(context)
             .setView(editText)
@@ -178,7 +204,7 @@ class OperationsManager(private val context: Context) {
                         if (name.isBlank()) return@setOnClickListener
                         val file = File(path, name)
                         if (file.exists()) {
-                            Toast.makeText(context, R.string.toast_file_exists, Toast.LENGTH_SHORT)
+                            Toast.makeText(context, onExistMessage, Toast.LENGTH_SHORT)
                                 .apply { setGravity(Gravity.CENTER, 0, 0) }
                                 .show()
                             return@setOnClickListener
@@ -222,6 +248,12 @@ class OperationsManager(private val context: Context) {
             .setNegativeButton(R.string.dialog_file_exists_negative_button) { dialog, _ ->
                 dialog.cancel()
                 cont.complete(null)
+            }
+            .setOnDismissListener {
+                imm?.hideSoftInputFromWindow(
+                    editText.windowToken,
+                    InputMethodManager.HIDE_IMPLICIT_ONLY
+                )
             }
             .show()
         return cont
