@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="HardcodedText">
+    <item
+        android:id="@+id/menu_actions_paste"
+        android:title="paste"
+        android:visible="false"
+        tools:visible="true" />
+    <item
+        android:id="@+id/menu_actions_create"
+        android:title="create"
+        android:visible="false"
+        tools:visible="true" />
+    <item
+        android:id="@+id/menu_actions_deselect"
+        android:title="deselect"
+        android:visible="false"
+        tools:visible="true" />
+    <item
+        android:id="@+id/menu_actions_clear"
+        android:title="clear queue"
+        android:visible="false"
+        tools:visible="true" />
+</menu>

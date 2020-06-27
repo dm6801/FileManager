@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/menu_directory_open"
+        android:title="open" />
+    <item
+        android:id="@+id/menu_directory_copy"
+        android:title="copy" />
+    <item
+        android:id="@+id/menu_directory_move"
+        android:title="move" />
+    <item
+        android:id="@+id/menu_directory_delete"
+        android:title="delete" />
+</menu>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="32dp"
+    android:orientation="horizontal"
+    tools:ignore="UseCompoundDrawables">
+
+    <ImageView
+        android:id="@+id/item_queue_remove"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_gravity="bottom"
+        android:paddingStart="4dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="0dp"
+        android:src="@drawable/ic_baseline_close_24"
+        tools:ignore="ContentDescription" />
+
+    <TextView
+        android:id="@+id/item_queue_name"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="bottom"
+        android:ellipsize="start"
+        android:gravity="bottom"
+        android:paddingStart="4dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="4dp"
+        android:singleLine="true"
+        tools:text="@tools:sample/lorem" />
+</LinearLayout>

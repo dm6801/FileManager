@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/file_manager_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:animateLayoutChanges="true"
+    android:orientation="vertical"
+    tools:ignore="HardcodedText,ContentDescription">
+
+    <View
+        android:id="@+id/file_manager_click_area"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/file_manager_recycler" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/file_manager_queue_recycler"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/file_manager_recycler"
+        app:layout_constraintEnd_toStartOf="@id/file_manager_menu"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0"
+        app:layout_constraintVertical_chainStyle="packed"
+        app:layout_goneMarginEnd="24dp"
+        tools:layoutManager="androidx.recyclerview.widget.StaggeredGridLayoutManager"
+        tools:listitem="@layout/item_queue"
+        tools:visibility="visible" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/file_manager_recycler"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/file_manager_menu"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/file_manager_queue_recycler"
+        app:layout_constraintVertical_bias="0"
+        app:layout_constraintVertical_chainStyle="packed"
+        app:layout_goneMarginEnd="24dp"
+        tools:listitem="@layout/item_file" />
+
+    <LinearLayout
+        android:id="@+id/file_manager_menu"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingTop="24dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible">
+
+        <Button
+            android:id="@+id/file_manager_menu_open"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="open" />
+
+        <Button
+            android:id="@+id/file_manager_menu_delete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="delete" />
+
+        <Button
+            android:id="@+id/file_manager_menu_create"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="create" />
+
+        <Button
+            android:id="@+id/file_manager_menu_copy"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="copy" />
+
+        <Button
+            android:id="@+id/file_manager_menu_cut"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="cut" />
+
+        <Button
+            android:id="@+id/file_manager_menu_move"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="move" />
+
+        <Button
+            android:id="@+id/file_manager_menu_unqueue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="unqueue" />
+
+        <Button
+            android:id="@+id/file_manager_menu_clear_queue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="clear queue"
+            android:textSize="10sp"
+            tools:ignore="SmallSp" />
+
+        <Button
+            android:id="@+id/file_manager_menu_deselect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="deselect" />
+
+        <Button
+            android:id="@+id/file_manager_menu_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="refresh" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/file_manager_menu_button"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_baseline_more_vert_24"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1"
+        app:layout_constraintStart_toEndOf="@id/file_manager_queue_recycler"
+        app:layout_constraintTop_toTopOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

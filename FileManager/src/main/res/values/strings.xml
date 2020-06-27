@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="files">
+        <item quantity="one">%d file</item>
+        <item quantity="other">%d files</item>
+    </plurals>
+    <string name="dialog_file_delete_message">Are you sure you want to delete\n%1$s?</string>
+    <string name="dialog_file_delete_positive_button">Delete</string>
+    <string name="dialog_file_delete_negative_button">Cancel</string>
+    <string name="dialog_file_create_positive_button">Create</string>
+    <string name="dialog_file_create_negative_button">Cancel</string>
+    <string name="dialog_file_exists_message">File already exists</string>
+    <string name="dialog_file_exists_positive_button">Rename</string>
+    <string name="dialog_file_exists_negative_button">Overwrite</string>
+    <string name="toast_file_exists">File exists</string>
+</resources>
