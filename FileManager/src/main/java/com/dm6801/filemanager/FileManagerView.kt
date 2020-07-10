@@ -13,6 +13,7 @@ import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
+import com.dm6801.filemanager.operations.OperationsManager
 import kotlinx.android.synthetic.main.view_file_manager.view.*
 import java.io.File
 
@@ -40,7 +41,8 @@ class FileManagerView @JvmOverloads constructor(
     private val deselectButton: Button? get() = file_manager_menu_deselect
     private val refreshButton: Button? get() = file_manager_menu_refresh
 
-    private val operations = OperationsManager(context)
+    private val operations =
+        OperationsManager(context)
     private val pathsAdapter = PathsAdapter(operations).observe(Observer(::onSelected))
     private val queueAdapter = QueueAdapter(operations)
 

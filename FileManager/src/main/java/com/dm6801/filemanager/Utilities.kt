@@ -8,14 +8,22 @@ import android.webkit.MimeTypeMap
 import kotlinx.coroutines.*
 import kotlin.coroutines.CoroutineContext
 
-private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+fun <T> List<T>.mutate(action: MutableList<T>.() -> Unit): List<T> {
+    return try {
+        (this as? MutableList)?.apply(action)
+    } catch (_: Throwable) {
+        null
+    } ?: toMutableList().apply(action)
+}
+
+val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
     throwable.printStackTrace()
 }
 
 internal fun CoroutineScope?.safeLaunch(
     context: CoroutineContext = Dispatchers.Main,
     block: suspend CoroutineScope.() -> Unit
-): Job? {
+): Job {
     return (this ?: CoroutineScope(context)).launch(context + exceptionHandler) {
         try {
             block()

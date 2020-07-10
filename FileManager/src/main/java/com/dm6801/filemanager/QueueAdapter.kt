@@ -11,6 +11,8 @@ import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.dm6801.filemanager.operations.Operation
+import com.dm6801.filemanager.operations.OperationsManager
 import kotlinx.android.synthetic.main.item_queue.view.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -85,7 +87,7 @@ class QueueAdapter(private val operations: OperationsManager) :
     fun remove(position: Int) {
         if (position !in currentList.indices) return
         CoroutineScope(Dispatchers.IO).launch {
-            val updated = currentList.toMutableList().apply { removeAt(position) }
+            val updated = currentList.mutate { removeAt(position) }
             withContext(Dispatchers.Main) {
                 submitList(updated) {
                     recyclerView?.isVisible = currentList.isNotEmpty()
@@ -96,7 +98,7 @@ class QueueAdapter(private val operations: OperationsManager) :
                 queueIndex = -1
             } else {
                 operations.update(queueIndex) {
-                    apply { copy(paths = paths?.toMutableList()?.apply { removeAt(position) }) }
+                    apply { paths = paths?.mutate { removeAt(position) } }
                 }
             }
         }

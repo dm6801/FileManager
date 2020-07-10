@@ -11,6 +11,10 @@ import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.dm6801.filemanager.operations.Copy
+import com.dm6801.filemanager.operations.Move
+import com.dm6801.filemanager.operations.Operation
+import com.dm6801.filemanager.operations.OperationsManager
 import kotlinx.android.synthetic.main.item_directory.view.*
 import kotlinx.android.synthetic.main.item_error.view.*
 import kotlinx.android.synthetic.main.item_file.view.*
@@ -197,10 +201,7 @@ class PathsAdapter(private val operations: OperationsManager) :
             .apply {
                 inflate(R.menu.actions)
                 menu.findItem(R.id.menu_actions_paste).isVisible =
-                    operations.peek()?.let {
-                        it.type == Operation.Type.Copy ||
-                                it.type == Operation.Type.Move
-                    } == true
+                    operations.peek()?.let { it is Copy || it is Move } == true
                 menu.findItem(R.id.menu_actions_deselect).isVisible = isAnySelected
                 menu.findItem(R.id.menu_actions_clear).isVisible = operations.size != 0
                 setOnMenuItemClickListener { menuItem ->
@@ -234,7 +235,7 @@ class PathsAdapter(private val operations: OperationsManager) :
     }
 
     fun createFile() {
-        operations.create(rootPath ?: return)
+        operations.createFile(rootPath ?: return)
     }
 
     fun createFolder() {

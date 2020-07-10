@@ -1,4 +1,4 @@
-package com.dm6801.filemanager
+package com.dm6801.filemanager.operations
 
 import android.content.Context
 import android.content.DialogInterface
@@ -9,11 +9,14 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.getSystemService
 import androidx.lifecycle.Observer
+import com.dm6801.filemanager.R
+import com.dm6801.filemanager.launchOpenFile
 import kotlinx.coroutines.*
 import java.io.File
 import kotlin.properties.Delegates
 
 class OperationsManager(private val context: Context) {
+
 
     enum class Event {
         Queue, Update, Execute, Remove;
@@ -74,13 +77,13 @@ class OperationsManager(private val context: Context) {
 
     fun executeNext(path: String) {
         poll()?.apply { destinationPath = path }
-            ?.execute(onFileExists = { fileExistsDialog(it).await() })
+            ?.execute(observe = true, onFileExists = { fileExistsDialog(it).await() })
     }
 
     fun executeAll(path: String) {
         repeat(queue.size) {
             poll()?.apply { destinationPath = path }
-                ?.execute(onFileExists = { fileExistsDialog(it).await() })
+                ?.execute(observe = true, onFileExists = { fileExistsDialog(it).await() })
         }
     }
 
@@ -88,31 +91,9 @@ class OperationsManager(private val context: Context) {
         context.launchOpenFile(path)
     }
 
-    private fun queue(
-        operationType: Operation.Type,
-        path: String,
-        destination: String?
-    ): Pair<Int, Operation> {
-        return queue(operationType, listOf(path), destination)
-    }
-
-    private fun queue(
-        operationType: Operation.Type,
-        paths: List<String>,
-        destination: String?
-    ): Pair<Int, Operation> {
-        val operation = Operation(operationType, paths, destination)
-        val index = queue(operation)
-        return (index to operation.observe())
-    }
-
-    private fun Operation.observe(): Operation = apply {
-        observe(Observer { notifyObservers(Event.Execute) })
-    }
-
     fun copy(paths: List<String>) {
         if (paths.isEmpty()) return
-        queue(Operation.Type.Copy, paths, null)
+        queue(Copy(paths, null))
     }
 
     fun copy(path: String) {
@@ -122,7 +103,7 @@ class OperationsManager(private val context: Context) {
 
     fun move(paths: List<String>) {
         if (paths.isEmpty()) return
-        queue(Operation.Type.Move, paths, null)
+        queue(Move(paths, null))
     }
 
     fun move(path: String) {
@@ -130,39 +111,34 @@ class OperationsManager(private val context: Context) {
         move(listOf(path))
     }
 
-    fun create(path: String) {
+    fun createFile(path: String) {
         val file = File(path)
         if (file.isDirectory) {
             createFileDialog(path) { name ->
-                Operation(
-                    Operation.Type.CreateFile,
-                    listOf("$path/${name ?: return@createFileDialog}"),
-                    null
-                ).observe()
-                    .execute()
+                if (name == null) return@createFileDialog
+                Create(listOf("$path/$name"), Operation.Type.File)
+                    .execute(observe = true)
             }
         } else {
-            Operation(Operation.Type.CreateFile, listOf(path), null)
-                .observe()
-                .execute(onFileExists = { fileExistsDialog(it).await() })
+            Create(listOf(path), Operation.Type.File)
+                .execute(observe = true, onFileExists = { fileExistsDialog(it).await() })
         }
     }
 
     fun createFolder(path: String) {
         val file = File(path)
         if (file.isDirectory) {
-            createFileDialog(path, R.string.toast_folder_exists) { name ->
-                Operation(
-                    Operation.Type.CreateFolder,
-                    listOf("$path/${name ?: return@createFileDialog}"),
-                    null
-                ).observe()
-                    .execute()
+            createFileDialog(
+                path,
+                R.string.toast_folder_exists
+            ) { name ->
+                if (name == null) return@createFileDialog
+                Create(listOf("$path/$name"), Operation.Type.Folder)
+                    .execute(observe = true)
             }
         } else {
-            Operation(Operation.Type.CreateFolder, listOf(path), null)
-                .observe()
-                .execute(onFileExists = { fileExistsDialog(it).await() })
+            Create(listOf(path), Operation.Type.Folder)
+                .execute(observe = true, onFileExists = { fileExistsDialog(it).await() })
         }
     }
 
@@ -170,21 +146,31 @@ class OperationsManager(private val context: Context) {
         val file = File(path)
         if (!file.exists()) return
         deleteFileDialog(path) {
-            Operation(Operation.Type.Delete, listOf(path), null)
-                .observe()
-                .execute()
+            Delete(listOf(path))
+                .execute(observe = true)
         }
     }
 
     fun delete(paths: List<String>) {
         deleteFileDialog(paths.joinToString(", ")) {
-            Operation(Operation.Type.Delete, paths, null)
-                .observe()
-                .execute()
+            Delete(paths)
+                .execute(observe = true)
         }
     }
 
-    fun createFileDialog(
+    private fun Operation.observe(): Operation = apply {
+        observe(Observer { notifyObservers(Event.Execute) })
+    }
+
+    private fun Operation.execute(
+        observe: Boolean = false,
+        onFileExists: (suspend (name: String) -> String?)? = null
+    ) {
+        if (observe) observe()
+        execute(onFileExists)
+    }
+
+    private fun createFileDialog(
         path: String,
         onExistMessage: Int = R.string.toast_file_exists,
         action: (String?) -> Unit
@@ -217,7 +203,7 @@ class OperationsManager(private val context: Context) {
             .show()
     }
 
-    fun deleteFileDialog(path: String, action: () -> Unit) {
+    private fun deleteFileDialog(path: String, action: () -> Unit) {
         AlertDialog.Builder(context)
             .setMessage(
                 context.getString(
