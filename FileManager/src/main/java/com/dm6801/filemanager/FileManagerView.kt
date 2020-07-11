@@ -2,12 +2,15 @@ package com.dm6801.filemanager
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Rect
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
+import androidx.core.graphics.contains
 import androidx.core.view.isVisible
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -15,7 +18,12 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.dm6801.filemanager.operations.OperationsManager
 import kotlinx.android.synthetic.main.view_file_manager.view.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 class FileManagerView @JvmOverloads constructor(
     context: Context,
@@ -24,8 +32,13 @@ class FileManagerView @JvmOverloads constructor(
     defStyleRes: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr, defStyleRes) {
 
+    companion object {
+        val TAG = this::class.java.enclosingClass?.simpleName!!
+    }
+
     private val pathsRecycler: RecyclerView? get() = file_manager_recycler
     private val queueRecycler: RecyclerView? get() = file_manager_queue_recycler
+    private val rectSelectView: RectangleSelectionView? get() = file_manager_rectangle_selection
     private val clickArea: View? get() = file_manager_click_area
     private val menuButton: ImageView? get() = file_manager_menu_button
     private val menuView: LinearLayout? get() = file_manager_menu
@@ -41,8 +54,7 @@ class FileManagerView @JvmOverloads constructor(
     private val deselectButton: Button? get() = file_manager_menu_deselect
     private val refreshButton: Button? get() = file_manager_menu_refresh
 
-    private val operations =
-        OperationsManager(context)
+    private val operations = OperationsManager(context)
     private val pathsAdapter = PathsAdapter(operations).observe(Observer(::onSelected))
     private val queueAdapter = QueueAdapter(operations)
 
@@ -69,9 +81,20 @@ class FileManagerView @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     private fun initMenu() {
         clickArea?.setOnTouchListener { v, event ->
-            if (event.actionMasked == MotionEvent.ACTION_UP)
-                pathsAdapter.showPopupMenu(v, event.rawX to event.rawY)
-            true
+            if (event.actionMasked == MotionEvent.ACTION_UP) {
+                val clickAreaHitRect = Rect()
+                clickArea?.getHitRect(clickAreaHitRect)
+                val x = (event.rawX + event.x) / 2
+                val y = (event.rawY + event.y) / 2
+                val clicked = clickAreaHitRect.contains(x.toInt(), y.toInt())
+                return@setOnTouchListener if (clicked) {
+                    pathsAdapter.showPopupMenu(v, x to y)
+                    true
+                } else {
+                    false
+                }
+            }
+            false
         }
         menuButton?.setOnClickListener {
             menuView?.run {
@@ -198,6 +221,47 @@ class FileManagerView @JvmOverloads constructor(
 
     private fun onSelected(selected: List<PathsAdapter.Item>?) {
         refreshMenuButtons(selected?.size ?: 0)
+    }
+
+    private val motionEvents: MutableList<MotionEvent> = mutableListOf()
+
+    @SuppressLint("Recycle")
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        ev ?: return false
+        motionEvents.add(MotionEvent.obtain(ev))
+        Log.d(
+            TAG,
+            "motionEvents: ${motionEvents.joinToString(limit = 5) { MotionEvent.actionToString(it.actionMasked) }}"
+        )
+        val recyclerRect = Rect(); pathsRecycler?.getHitRect(recyclerRect)
+        val clickAreaRect = Rect(); clickArea?.getHitRect(clickAreaRect)
+        val x = ev.x.toInt()
+        val y = ev.y.toInt()
+        return when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                rectSelectView?.onMotionEvent(ev)
+                true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                rectSelectView?.onMotionEvent(ev)
+                false
+            }
+            MotionEvent.ACTION_UP -> {
+                if (rectSelectView?.isMoving != true) {
+                    for (event in motionEvents) {
+                        when {
+                            recyclerRect.contains(x, y) -> pathsRecycler?.dispatchTouchEvent(event)
+                            clickAreaRect.contains(x, y) -> clickArea?.dispatchTouchEvent(event)
+                        }
+                    }
+                }
+                rectSelectView?.onMotionEvent(ev)
+                motionEvents.forEach(MotionEvent::recycle)
+                motionEvents.clear()
+                true
+            }
+            else -> true
+        }
     }
 
 }

@@ -13,13 +13,13 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.dm6801.filemanager.operations.Copy
 import com.dm6801.filemanager.operations.Move
-import com.dm6801.filemanager.operations.Operation
 import com.dm6801.filemanager.operations.OperationsManager
 import kotlinx.android.synthetic.main.item_directory.view.*
 import kotlinx.android.synthetic.main.item_error.view.*
 import kotlinx.android.synthetic.main.item_file.view.*
 import kotlinx.coroutines.*
 import java.io.File
+import java.lang.ref.WeakReference
 import kotlin.properties.Delegates
 
 class PathsAdapter(private val operations: OperationsManager) :
@@ -106,6 +106,18 @@ class PathsAdapter(private val operations: OperationsManager) :
         }
     }
 
+    fun select(x1: Int, y1: Int, x2: Int, y2: Int) {
+        //recyclerView?.findChildViewUnder()
+    }
+
+    fun select(range: IntRange) {
+        for (position in range) {
+            (getItem(position) as? Item.Entry)?.isSelected = true
+        }
+        notifyItemRangeChanged(range.first, range.count())
+        onSelectionUpdate = selected
+    }
+
     fun select(position: Int) {
         (getItem(position) as? Item.Entry)?.isSelected = true
         notifyItemChanged(position)
@@ -129,54 +141,10 @@ class PathsAdapter(private val operations: OperationsManager) :
         }
     }
 
-    sealed class Item(open val path: String) {
-        data class Back(override val path: String) : Item(path) {
-            companion object {
-                const val viewType = -1
-            }
-
-            val canRead: Boolean = File(path).canRead()
-        }
-
-        data class Entry(
-            override val path: String,
-            val type: FileType,
-            var isSelected: Boolean
-        ) : Item(path) {
-            constructor(file: File) : this(file.absolutePath, getType(file), false)
-            constructor(path: String) : this(File(path))
-
-            val file by lazy { File(path) }
-            val files: List<File>? = try {
-                file.listFiles()?.toList()
-            } catch (t: Throwable) {
-                null
-            }
-
-            companion object {
-                fun getType(file: File): FileType {
-                    return try {
-                        when {
-                            file.isDirectory -> FileType.Directory
-                            file.isFile -> FileType.File
-                            !file.exists() -> FileType.NotExists
-                            !file.canRead() -> FileType.NoAccess
-                            else -> FileType.Error
-                        }
-                    } catch (e: SecurityException) {
-                        FileType.NoAccess
-                    } catch (t: Throwable) {
-                        FileType.Error
-                    }
-                }
-            }
-        }
-    }
-
-    /*@SuppressLint("ClickableViewAccessibility")
+    @SuppressLint("ClickableViewAccessibility")
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
-        recyclerView.setOnTouchListener { v, event ->
+        /*recyclerView.setOnTouchListener { v, event ->
             if (event.actionMasked == MotionEvent.ACTION_UP &&
                 recyclerView.findChildViewUnder(event.rawX, event.rawY) == null
             ) {
@@ -184,15 +152,18 @@ class PathsAdapter(private val operations: OperationsManager) :
                     recyclerView.showPopupMenu(event.x to event.y)
             }
             false
-        }
-    }*/
+        }*/
+        _recyclerView = WeakReference(recyclerView)
+    }
+
+    private val recyclerView: RecyclerView? get() = _recyclerView.get()
+    private var _recyclerView: WeakReference<RecyclerView?> = WeakReference(null)
 
     fun showPopupMenu(view: View, point: Pair<Float, Float>) {
-        val anchor = View(view.context)
-            .apply {
-                layoutParams = ViewGroup.LayoutParams(1, 1)
-                setBackgroundColor(Color.TRANSPARENT)
-            }
+        val anchor = View(view.context).apply {
+            layoutParams = ViewGroup.LayoutParams(1, 1)
+            setBackgroundColor(Color.TRANSPARENT)
+        }
         val parent = view.parent as? ViewGroup
         parent?.addView(anchor)
         anchor.x = point.first
@@ -220,6 +191,10 @@ class PathsAdapter(private val operations: OperationsManager) :
                         }
                         R.id.menu_actions_clear -> {
                             clearQueue()
+                            true
+                        }
+                        R.id.menu_actions_refresh -> {
+                            refresh()
                             true
                         }
                         else -> null
@@ -311,6 +286,50 @@ class PathsAdapter(private val operations: OperationsManager) :
         return getItem(position) as? T
     }
 
+    sealed class Item(open val path: String) {
+        data class Back(override val path: String) : Item(path) {
+            companion object {
+                const val viewType = -1
+            }
+
+            val canRead: Boolean = File(path).canRead()
+        }
+
+        data class Entry(
+            override val path: String,
+            val type: FileType,
+            var isSelected: Boolean
+        ) : Item(path) {
+            constructor(file: File) : this(file.absolutePath, getType(file), false)
+            constructor(path: String) : this(File(path))
+
+            val file by lazy { File(path) }
+            val files: List<File>? = try {
+                file.listFiles()?.toList()
+            } catch (t: Throwable) {
+                null
+            }
+
+            companion object {
+                fun getType(file: File): FileType {
+                    return try {
+                        when {
+                            file.isDirectory -> FileType.Directory
+                            file.isFile -> FileType.File
+                            !file.exists() -> FileType.NotExists
+                            !file.canRead() -> FileType.NoAccess
+                            else -> FileType.Error
+                        }
+                    } catch (e: SecurityException) {
+                        FileType.NoAccess
+                    } catch (t: Throwable) {
+                        FileType.Error
+                    }
+                }
+            }
+        }
+    }
+
     abstract inner class ViewHolder<T : Item>(itemView: View) : RecyclerView.ViewHolder(itemView) {
         var isSelected: Boolean = false
 
@@ -387,6 +406,11 @@ class PathsAdapter(private val operations: OperationsManager) :
 
         override fun createGestureListener(item: Item.Entry): GestureListener {
             return object : GestureListener() {
+                override fun onClick() {
+                    super.onClick()
+                    popupItemMenu(itemView, item)
+                }
+
                 override fun onDoubleTap(e: MotionEvent?): Boolean {
                     openDirectory(item.path)
                     return true
@@ -406,32 +430,7 @@ class PathsAdapter(private val operations: OperationsManager) :
             return object : GestureListener() {
                 override fun onClick() {
                     super.onClick()
-                    PopupMenu(itemView.context, itemView)
-                        .apply {
-                            inflate(R.menu.item_file)
-                            setOnMenuItemClickListener { menuItem ->
-                                when (menuItem.itemId) {
-                                    R.id.menu_file_open -> {
-                                        operations.openFile(item.path)
-                                        true
-                                    }
-                                    R.id.menu_file_copy -> {
-                                        operations.copy(item.path)
-                                        true
-                                    }
-                                    R.id.menu_file_move -> {
-                                        operations.move(item.path)
-                                        true
-                                    }
-                                    R.id.menu_file_delete -> {
-                                        operations.delete(item.path)
-                                        true
-                                    }
-                                    else -> null
-                                } ?: false
-                            }
-                            show()
-                        }
+                    popupItemMenu(itemView, item)
                 }
 
                 override fun onDoubleTap(e: MotionEvent?): Boolean {
@@ -440,6 +439,35 @@ class PathsAdapter(private val operations: OperationsManager) :
                 }
             }
         }
+    }
+
+    private fun popupItemMenu(itemView: View, item: Item.Entry) {
+        PopupMenu(itemView.context, itemView)
+            .apply {
+                inflate(R.menu.item)
+                setOnMenuItemClickListener { menuItem ->
+                    when (menuItem.itemId) {
+                        R.id.menu_file_open -> {
+                            operations.openFile(item.path)
+                            true
+                        }
+                        R.id.menu_file_copy -> {
+                            operations.copy(item.path)
+                            true
+                        }
+                        R.id.menu_file_move -> {
+                            operations.move(item.path)
+                            true
+                        }
+                        R.id.menu_file_delete -> {
+                            operations.delete(item.path)
+                            true
+                        }
+                        else -> null
+                    } ?: false
+                }
+                show()
+            }
     }
 
     inner class ErrorViewHolder(itemView: View) : ViewHolder<Item.Entry>(itemView) {

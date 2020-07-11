@@ -49,6 +49,16 @@
         app:layout_goneMarginEnd="24dp"
         tools:listitem="@layout/item_file" />
 
+    <com.dm6801.filemanager.RectangleSelectionView
+        android:id="@+id/file_manager_rectangle_selection"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="@id/file_manager_click_area"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/file_manager_recycler"
+        tools:visibility="invisible" />
+
     <LinearLayout
         android:id="@+id/file_manager_menu"
         android:layout_width="wrap_content"

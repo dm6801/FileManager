@@ -22,4 +22,7 @@
         android:title="clear queue"
         android:visible="false"
         tools:visible="true" />
+    <item
+        android:id="@+id/menu_actions_refresh"
+        android:title="refresh" />
 </menu>
