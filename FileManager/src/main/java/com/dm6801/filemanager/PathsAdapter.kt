@@ -2,15 +2,17 @@ package com.dm6801.filemanager
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.graphics.Rect
 import android.view.*
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
-import androidx.core.view.isGone
-import androidx.core.view.isVisible
+import androidx.core.view.*
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.dm6801.filemanager.contains
 import com.dm6801.filemanager.operations.Copy
 import com.dm6801.filemanager.operations.Move
 import com.dm6801.filemanager.operations.OperationsManager
@@ -20,6 +22,7 @@ import kotlinx.android.synthetic.main.item_file.view.*
 import kotlinx.coroutines.*
 import java.io.File
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.properties.Delegates
 
 class PathsAdapter(private val operations: OperationsManager) :
@@ -106,11 +109,34 @@ class PathsAdapter(private val operations: OperationsManager) :
         }
     }
 
-    fun select(x1: Int, y1: Int, x2: Int, y2: Int) {
-        //recyclerView?.findChildViewUnder()
+    private fun getVisibleChildrenRange(): IntRange? {
+        val layoutManager = recyclerView?.layoutManager as? LinearLayoutManager ?: return null
+        return layoutManager.findFirstVisibleItemPosition()..layoutManager.findLastVisibleItemPosition()
     }
 
-    fun select(range: IntRange) {
+    fun select(rect: Rect) {
+        val childrenPositions = getVisibleChildrenRange()
+        val children =
+            childrenPositions?.mapNotNull { recyclerView?.findViewHolderForAdapterPosition(it)?.itemView }
+                ?: emptyList()
+        var first = -1
+        var last = -1
+        var index = 0
+        for (child in children) {
+            val viewHitRect = child.hitRect()
+            if (first == -1) {
+                if (viewHitRect.intersect(rect)) first = index
+            } else {
+                if (viewHitRect.intersect(rect)) last = index
+                else break
+            }
+            index += 1
+        }
+        if (first == -1 || last < first) return
+        select(first..last)
+    }
+
+    private fun select(range: IntRange) {
         for (position in range) {
             (getItem(position) as? Item.Entry)?.isSelected = true
         }
@@ -144,15 +170,6 @@ class PathsAdapter(private val operations: OperationsManager) :
     @SuppressLint("ClickableViewAccessibility")
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
-        /*recyclerView.setOnTouchListener { v, event ->
-            if (event.actionMasked == MotionEvent.ACTION_UP &&
-                recyclerView.findChildViewUnder(event.rawX, event.rawY) == null
-            ) {
-                if (isAnySelected || operations.size != 0)
-                    recyclerView.showPopupMenu(event.x to event.y)
-            }
-            false
-        }*/
         _recyclerView = WeakReference(recyclerView)
     }
 
@@ -346,7 +363,8 @@ class PathsAdapter(private val operations: OperationsManager) :
 
         @SuppressLint("ClickableViewAccessibility")
         protected open fun setOnTouchListener(item: T) {
-            val gestureDetector = GestureDetector(itemView.context, createGestureListener(item))
+            val gestureDetector =
+                GestureDetectorCompat(itemView.context, createGestureListener(item))
             itemView.setOnTouchListener { _, event ->
                 gestureDetector.onTouchEvent(event)
             }

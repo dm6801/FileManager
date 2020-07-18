@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.util.AttributeSet
 import android.util.Log
 import android.view.MotionEvent
@@ -19,7 +20,7 @@ class RectangleSelectionView @JvmOverloads constructor(
 
     companion object {
         val TAG = this::class.java.enclosingClass?.simpleName!!
-        private const val SKIP_PX = 10f
+        private const val SKIP_PX = 4f
     }
 
     private var x1 = -1f
@@ -79,15 +80,31 @@ class RectangleSelectionView @JvmOverloads constructor(
         }
     }
 
-    override fun dispatchTouchEvent(event: MotionEvent?): Boolean {
+    /*override fun dispatchTouchEvent(event: MotionEvent?): Boolean {
         return true
-    }
+    }*/
 
     fun onMotionEvent(ev: MotionEvent?): Boolean? {
         return ev?.parse()
     }
 
+    private fun View.contains(ev: MotionEvent?): Boolean {
+        ev ?: return false
+        val hitRect = Rect()
+        getHitRect(hitRect)
+        return hitRect.contains(ev.x.toInt(), ev.y.toInt()) ||
+                hitRect.contains(ev.rawX.toInt(), ev.rawY.toInt())
+    }
+
     private fun MotionEvent.parse(): Boolean? {
+        if (!contains(this)) {
+            if (MotionEvent.ACTION_UP == actionMasked) {
+                reset()
+                invalidate()
+                return false
+            }
+            //return false
+        }
         return when (actionMasked) {
             MotionEvent.ACTION_DOWN -> onActionDown(this)
             MotionEvent.ACTION_MOVE -> onActionMove(this)
@@ -109,7 +126,7 @@ class RectangleSelectionView @JvmOverloads constructor(
         Log.d(TAG, "MotionEvent.ACTION_MOVE\t$this")
         if ((ev.x - x2).absoluteValue < SKIP_PX || (ev.y - y2).absoluteValue < SKIP_PX) return false
         x2 = ev.x
-        y2 = ev.y
+        y2 = ev.y.coerceAtMost(x + height)
         invalidate()
         return true
     }
@@ -120,11 +137,44 @@ class RectangleSelectionView @JvmOverloads constructor(
         x2 = ev.x
         y2 = ev.y
         invalidate()
+        postRect()
+        reset()
+        return true
+    }
+
+    private var onRect: ((Rect) -> Unit)? = null
+
+    fun onRect(onRect: (Rect) -> Unit) {
+        this.onRect = onRect
+    }
+
+    private fun postRect() {
+        val x1: Int
+        val y1: Int
+        val x2: Int
+        val y2: Int
+        if (this.x1 < this.x2) {
+            x1 = this.x1.toInt()
+            x2 = this.x2.toInt()
+        } else {
+            x1 = this.x2.toInt()
+            x2 = this.x1.toInt()
+        }
+        if (this.y1 < this.y2) {
+            y1 = this.y1.toInt()
+            y2 = this.y2.toInt()
+        } else {
+            y1 = this.y2.toInt()
+            y2 = this.y1.toInt()
+        }
+        onRect?.invoke(Rect(x1, y1, x2, y2))
+    }
+
+    private fun reset() {
         x1 = -1f
         x2 = -1f
         y1 = -1f
         y2 = -1f
-        return true
     }
 
 }

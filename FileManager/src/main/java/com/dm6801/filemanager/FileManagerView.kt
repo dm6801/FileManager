@@ -2,7 +2,6 @@ package com.dm6801.filemanager
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Rect
 import android.util.AttributeSet
 import android.util.Log
 import android.view.MotionEvent
@@ -10,7 +9,6 @@ import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
-import androidx.core.graphics.contains
 import androidx.core.view.isVisible
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -18,12 +16,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.dm6801.filemanager.operations.OperationsManager
 import kotlinx.android.synthetic.main.view_file_manager.view.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 class FileManagerView @JvmOverloads constructor(
     context: Context,
@@ -81,20 +74,21 @@ class FileManagerView @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     private fun initMenu() {
         clickArea?.setOnTouchListener { v, event ->
-            if (event.actionMasked == MotionEvent.ACTION_UP) {
-                val clickAreaHitRect = Rect()
-                clickArea?.getHitRect(clickAreaHitRect)
-                val x = (event.rawX + event.x) / 2
-                val y = (event.rawY + event.y) / 2
-                val clicked = clickAreaHitRect.contains(x.toInt(), y.toInt())
-                return@setOnTouchListener if (clicked) {
-                    pathsAdapter.showPopupMenu(v, x to y)
-                    true
-                } else {
-                    false
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> true
+                MotionEvent.ACTION_UP -> {
+                    val x = (event.rawX + event.x) / 2
+                    val y = (event.rawY + event.y) / 2
+                    val isClicked = clickArea?.contains(x.toInt(), y.toInt()) == true
+                    return@setOnTouchListener if (isClicked) {
+                        pathsAdapter.showPopupMenu(v, x to y)
+                        true
+                    } else {
+                        false
+                    }
                 }
+                else -> false
             }
-            false
         }
         menuButton?.setOnClickListener {
             menuView?.run {
@@ -174,6 +168,7 @@ class FileManagerView @JvmOverloads constructor(
             adapter = pathsAdapter
             itemAnimator = null
         }
+        rectSelectView?.onRect(pathsAdapter::select)
     }
 
     private fun initQueueView() {
@@ -223,45 +218,33 @@ class FileManagerView @JvmOverloads constructor(
         refreshMenuButtons(selected?.size ?: 0)
     }
 
-    private val motionEvents: MutableList<MotionEvent> = mutableListOf()
+    private val MotionEvent.name: String get() = MotionEvent.actionToString(actionMasked)
 
     @SuppressLint("Recycle")
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
-        ev ?: return false
-        motionEvents.add(MotionEvent.obtain(ev))
-        Log.d(
-            TAG,
-            "motionEvents: ${motionEvents.joinToString(limit = 5) { MotionEvent.actionToString(it.actionMasked) }}"
-        )
-        val recyclerRect = Rect(); pathsRecycler?.getHitRect(recyclerRect)
-        val clickAreaRect = Rect(); clickArea?.getHitRect(clickAreaRect)
-        val x = ev.x.toInt()
-        val y = ev.y.toInt()
-        return when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                rectSelectView?.onMotionEvent(ev)
-                true
-            }
-            MotionEvent.ACTION_MOVE -> {
-                rectSelectView?.onMotionEvent(ev)
-                false
-            }
+        ev ?: return super.dispatchTouchEvent(ev)
+        Log.v(TAG, "dispatchTouchEvent(): ${ev.name}")
+        return super.dispatchTouchEvent(ev)
+    }
+
+    override fun onInterceptTouchEvent(ev: MotionEvent?): Boolean {
+        ev ?: return super.dispatchTouchEvent(ev)
+        Log.v(TAG, "onInterceptTouchEvent(): ${ev.name}")
+        rectSelectView?.onMotionEvent(ev)
+        when (ev.actionMasked) {
             MotionEvent.ACTION_UP -> {
-                if (rectSelectView?.isMoving != true) {
-                    for (event in motionEvents) {
-                        when {
-                            recyclerRect.contains(x, y) -> pathsRecycler?.dispatchTouchEvent(event)
-                            clickAreaRect.contains(x, y) -> clickArea?.dispatchTouchEvent(event)
-                        }
-                    }
-                }
-                rectSelectView?.onMotionEvent(ev)
-                motionEvents.forEach(MotionEvent::recycle)
-                motionEvents.clear()
-                true
+                if (rectSelectView?.isMoving == true)
+                    return true
             }
-            else -> true
         }
+        return super.onInterceptTouchEvent(ev)
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent?): Boolean {
+        event ?: return super.dispatchTouchEvent(event)
+        Log.v(TAG, "onTouchEvent(): ${event.name}")
+        return super.onTouchEvent(event)
     }
 
 }
