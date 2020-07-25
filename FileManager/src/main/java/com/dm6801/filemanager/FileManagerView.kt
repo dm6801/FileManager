@@ -27,7 +27,7 @@ class FileManagerView @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr, defStyleRes) {
 
     companion object {
-        val TAG = this::class.java.enclosingClass?.simpleName!!
+        const val TAG = "FileManagerView"
     }
 
     private val pathText: TextView? get() = file_manager_path_text
@@ -38,6 +38,7 @@ class FileManagerView @JvmOverloads constructor(
     private val menuButton: ImageView? get() = file_manager_menu_button
     private val menuView: LinearLayout? get() = file_manager_menu
     private val openButton: Button? get() = file_manager_menu_open
+    private val openWithButton: Button? get() = file_manager_menu_open_with
     private val renameButton: Button? get() = file_manager_menu_rename
     private val deleteButton: Button? get() = file_manager_menu_delete
     private val folderButton: Button? get() = file_manager_menu_folder
@@ -78,23 +79,24 @@ class FileManagerView @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     private fun initMenu() {
-        clickArea?.setOnTouchListener { v, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> true
-                MotionEvent.ACTION_UP -> {
-                    val x = (event.rawX + event.x) / 2
-                    val y = (event.rawY + event.y) / 2
-                    val isClicked = clickArea?.contains(x.toInt(), y.toInt()) == true
-                    return@setOnTouchListener if (isClicked) {
-                        pathsAdapter.showPopupMenu(v, x to y)
-                        true
-                    } else {
-                        false
-                    }
-                }
-                else -> false
+        clickArea?.setOnTouchListener(object : TouchListener() {
+            override fun onSingleClick(v: View?, event: MotionEvent): Boolean {
+                val view = v ?: return super.onSingleClick(v, event)
+                val ev = MotionEvent.obtain(event)
+                ev.offsetLocation(x, y)
+                pathsAdapter.showPopupMenu(view, (ev.x + ev.rawX) / 2 to (ev.y + ev.rawY) / 2)
+                ev.recycle()
+                return super.onSingleClick(v, event)
             }
-        }
+
+            override fun onDoubleClick(v: View?, event: MotionEvent): Boolean {
+                return true
+            }
+
+            override fun onLongClick(v: View?, event: MotionEvent): Boolean {
+                return true
+            }
+        })
         menuButton?.setOnClickListener {
             menuView?.run {
                 val isVisible = !isVisible
@@ -104,6 +106,7 @@ class FileManagerView @JvmOverloads constructor(
         }
         refreshMenuButtons()
         openButton?.setOnClickListener { pathsAdapter.openFile() }
+        openWithButton?.setOnClickListener { pathsAdapter.openFileWith() }
         renameButton?.setOnClickListener { pathsAdapter.rename() }
         deleteButton?.setOnClickListener { pathsAdapter.deleteFiles() }
         createButton?.setOnClickListener { pathsAdapter.createFile() }
@@ -128,6 +131,7 @@ class FileManagerView @JvmOverloads constructor(
         when {
             selectedSize <= 0 -> {
                 openButton?.disable()
+                openWithButton?.disable()
                 renameButton?.disable()
                 deleteButton?.disable()
                 createButton?.enable()
@@ -138,6 +142,10 @@ class FileManagerView @JvmOverloads constructor(
             }
             selectedSize == 1 -> {
                 openButton?.enable()
+                if (pathsAdapter.selected.firstOrNull()?.path?.let(::File)?.isFile == true)
+                    openWithButton?.enable()
+                else
+                    openWithButton?.disable()
                 renameButton?.enable()
                 deleteButton?.enable()
                 createButton?.enable()
@@ -148,6 +156,7 @@ class FileManagerView @JvmOverloads constructor(
             }
             selectedSize > 1 -> {
                 openButton?.disable()
+                openWithButton?.disable()
                 renameButton?.disable()
                 deleteButton?.enable()
                 createButton?.enable()
@@ -243,14 +252,10 @@ class FileManagerView @JvmOverloads constructor(
     override fun onInterceptTouchEvent(ev: MotionEvent?): Boolean {
         ev ?: return super.dispatchTouchEvent(ev)
         Log.v(TAG, "onInterceptTouchEvent(): ${ev.name}")
+        val isMoving = ev.actionMasked == MotionEvent.ACTION_UP && rectSelectView?.isMoving == true
         rectSelectView?.onMotionEvent(ev)
-        when (ev.actionMasked) {
-            MotionEvent.ACTION_UP -> {
-                if (rectSelectView?.isMoving == true)
-                    return true
-            }
-        }
-        return super.onInterceptTouchEvent(ev)
+        return if (isMoving) true
+        else super.onInterceptTouchEvent(ev)
     }
 
     @SuppressLint("ClickableViewAccessibility")

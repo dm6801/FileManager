@@ -70,11 +70,10 @@
         android:id="@+id/file_manager_rectangle_selection"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="@id/file_manager_recycler"
+        app:layout_constraintBottom_toBottomOf="@id/file_manager_click_area"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="@id/file_manager_recycler"
-        tools:visibility="invisible" />
+        app:layout_constraintTop_toTopOf="@id/file_manager_recycler" />
 
     <LinearLayout
         android:id="@+id/file_manager_menu"
@@ -94,6 +93,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="open" />
+
+        <Button
+            android:id="@+id/file_manager_menu_open_with"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="open with" />
 
         <Button
             android:id="@+id/file_manager_menu_rename"

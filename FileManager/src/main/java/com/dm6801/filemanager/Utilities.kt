@@ -6,8 +6,10 @@ import android.graphics.BitmapFactory
 import android.graphics.Rect
 import android.net.Uri
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.webkit.MimeTypeMap
 import android.widget.EditText
+import androidx.core.content.getSystemService
 import androidx.core.view.isVisible
 import kotlinx.coroutines.*
 import java.io.File
@@ -75,9 +77,12 @@ fun File.isAudio(): Boolean {
     return name.endsWith(".mp3")
 }
 
-fun EditText.edit() {
+private val Context.imm: InputMethodManager? get() = getSystemService()
+
+fun EditText.edit() = CoroutineScope(Dispatchers.Main).launch {
     setSelection(text?.length ?: 0)
     requestFocus()
+    context.imm?.showSoftInput(this@edit, InputMethodManager.SHOW_IMPLICIT)
 }
 
 internal fun View.enable() {

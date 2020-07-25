@@ -9,9 +9,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.getSystemService
 import androidx.lifecycle.Observer
-import com.dm6801.filemanager.R
-import com.dm6801.filemanager.edit
-import com.dm6801.filemanager.launchOpenFile
+import com.dm6801.filemanager.*
 import com.dm6801.filemanager.safeLaunch
 import kotlinx.coroutines.*
 import java.io.File
@@ -93,6 +91,10 @@ class OperationsManager(private val context: Context) {
 
     fun openFile(path: String) {
         context.launchOpenFile(path)
+    }
+
+    fun openFileWith(path: String) {
+        context.launchOpenFilePicker(path)
     }
 
     fun copy(paths: List<String>) {
