@@ -1,16 +1,15 @@
 package com.dm6801.filemanager.operations
 
-import android.util.Log
 import java.io.File
 
 class Create(
-    paths: List<String>?,
-    type: Type?
+    paths: List<String>,
+    type: Type
 ) : Operation(paths, null, type) {
 
     override suspend fun fileAction(
         file: File,
-        onFileExists: (suspend (name: String) -> String?)?
+        onFileExists: suspend (name: String?) -> String?
     ) {
         when (type) {
             Type.File -> createFile(file, onFileExists)
@@ -19,47 +18,37 @@ class Create(
     }
 
     @Suppress("BlockingMethodInNonBlockingContext")
-    private suspend fun createFile(file: File, onFileExists: (suspend (name: String) -> String?)?) {
+    private suspend fun createFile(
+        file: File,
+        onFileExists: suspend (name: String?) -> String?
+    ) {
         file.ensurePathExists()
         if (!file.exists()) {
             file.createNewFile()
         } else {
-            val newName = onFileExists?.invoke(file.name)
-            if (newName != null) { //rename
-                val newFile = File(file.parent, newName)
+            val newName = onFileExists(file.name)
+            if (newName.isNullOrBlank()) return
+            val newFile = File(file.parent, newName)
+            if (!newFile.exists())
                 newFile.createNewFile()
-            } else { //overwrite
-                file.delete()
-                file.createNewFile()
-            }
         }
 
     }
 
     private suspend fun createFolder(
         file: File,
-        onFileExists: (suspend (name: String) -> String?)?
+        onFileExists: suspend (name: String?) -> String?
     ) {
         file.ensurePathExists()
         if (!file.exists()) {
             file.mkdirs()
         } else {
-            val newPath = onFileExists?.invoke(file.name)
-            if (newPath != null) { //rename
-                val newFile = File(file.parent, newPath)
+            val newPath = onFileExists(file.name)
+            if (newPath.isNullOrBlank()) return
+            val newFile = File(file.parent, newPath)
+            if (!newFile.exists())
                 newFile.mkdirs()
-            } else { //overwrite
-                file.delete()
-                file.mkdirs()
-            }
         }
-    }
-
-    override fun logOperation() {
-        Log.d(
-            javaClass.superclass?.simpleName ?: javaClass.simpleName,
-            "executing ${javaClass.simpleName} on ${type?.name}..."
-        )
     }
 
 }

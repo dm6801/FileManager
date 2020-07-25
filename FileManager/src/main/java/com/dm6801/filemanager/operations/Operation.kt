@@ -14,6 +14,8 @@ abstract class Operation(
     val type: Type?
 ) {
 
+    protected val TAG = javaClass.superclass?.simpleName ?: javaClass.simpleName
+
     private val files = paths?.map { File(it) }
 
     enum class Type {
@@ -39,25 +41,17 @@ abstract class Operation(
     protected open val requireDestinationPath: Boolean = false
     protected open val requireFileExists: Boolean = false
 
-    fun execute(onFileExists: (suspend (name: String) -> String?)? = null) {
+    fun execute(onFileExists: suspend (name: String?) -> String?) {
         if (isExecuted == true) return
-        CoroutineScope(Dispatchers.IO).apply {
-            launch(exceptionHandler) {
-                //isExecuted = try {
-                iteratePaths(onFileExists)
-                //    true
-                //} catch (t: Throwable) {
-                //    t.printStackTrace()
-                //    false
-                //}
-            }.invokeOnCompletion { isExecuted = it == null }
-        }
+        CoroutineScope(Dispatchers.IO)
+            .launch(exceptionHandler) { iteratePaths(onFileExists) }
+            .invokeOnCompletion { isExecuted = it == null }
     }
 
-    private suspend fun iteratePaths(onFileExists: (suspend (name: String) -> String?)? = null) {
+    private suspend fun iteratePaths(onFileExists: suspend (name: String?) -> String?) {
         if (requireDestinationPath && destinationPath == null) return
         if (files.isNullOrEmpty()) return
-        logOperation()
+        Log.d(TAG, "executing ${javaClass.simpleName}...")
         for (file in files) {
             if (requireFileExists && !file.exists()) continue
             fileAction(file, onFileExists)
@@ -66,15 +60,8 @@ abstract class Operation(
 
     protected abstract suspend fun fileAction(
         file: File,
-        onFileExists: (suspend (name: String) -> String?)? = null
+        onFileExists: suspend (name: String?) -> String?
     )
-
-    protected open fun logOperation() {
-        Log.d(
-            javaClass.superclass?.simpleName ?: javaClass.simpleName,
-            "executing ${javaClass.simpleName}..."
-        )
-    }
 
     protected fun File.ensurePathExists(): File {
         try {

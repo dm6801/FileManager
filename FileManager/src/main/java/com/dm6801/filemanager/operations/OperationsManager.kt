@@ -10,9 +10,13 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.getSystemService
 import androidx.lifecycle.Observer
 import com.dm6801.filemanager.R
+import com.dm6801.filemanager.edit
 import com.dm6801.filemanager.launchOpenFile
+import com.dm6801.filemanager.safeLaunch
 import kotlinx.coroutines.*
 import java.io.File
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import kotlin.properties.Delegates
 
 class OperationsManager(private val context: Context) {
@@ -77,13 +81,13 @@ class OperationsManager(private val context: Context) {
 
     fun executeNext(path: String) {
         poll()?.apply { destinationPath = path }
-            ?.execute(observe = true, onFileExists = { fileExistsDialog(it).await() })
+            ?.execute(observe = true, onFileExists = ::fileExistsDialog)
     }
 
     fun executeAll(path: String) {
         repeat(queue.size) {
             poll()?.apply { destinationPath = path }
-                ?.execute(observe = true, onFileExists = { fileExistsDialog(it).await() })
+                ?.execute(observe = true, onFileExists = ::fileExistsDialog)
         }
     }
 
@@ -93,7 +97,7 @@ class OperationsManager(private val context: Context) {
 
     fun copy(paths: List<String>) {
         if (paths.isEmpty()) return
-        queue(Copy(paths, null))
+        queue(Copy(paths))
     }
 
     fun copy(path: String) {
@@ -103,7 +107,7 @@ class OperationsManager(private val context: Context) {
 
     fun move(paths: List<String>) {
         if (paths.isEmpty()) return
-        queue(Move(paths, null))
+        queue(Move(paths))
     }
 
     fun move(path: String) {
@@ -121,7 +125,7 @@ class OperationsManager(private val context: Context) {
             }
         } else {
             Create(listOf(path), Operation.Type.File)
-                .execute(observe = true, onFileExists = { fileExistsDialog(it).await() })
+                .execute(observe = true, onFileExists = ::fileExistsDialog)
         }
     }
 
@@ -138,7 +142,7 @@ class OperationsManager(private val context: Context) {
             }
         } else {
             Create(listOf(path), Operation.Type.Folder)
-                .execute(observe = true, onFileExists = { fileExistsDialog(it).await() })
+                .execute(observe = true, onFileExists = ::fileExistsDialog)
         }
     }
 
@@ -158,16 +162,55 @@ class OperationsManager(private val context: Context) {
         }
     }
 
+    fun rename(source: String) {
+        renameFileDialog(source) {
+            Rename(source, it ?: return@renameFileDialog)
+                .execute(observe = true)
+        }
+    }
+
     private fun Operation.observe(): Operation = apply {
         observe(Observer { notifyObservers(Event.Execute) })
     }
 
     private fun Operation.execute(
         observe: Boolean = false,
-        onFileExists: (suspend (name: String) -> String?)? = null
+        onFileExists: suspend (name: String?) -> String? = { null }
     ) {
         if (observe) observe()
         execute(onFileExists)
+    }
+
+    private fun renameFileDialog(
+        path: String,
+        onExistMessage: Int = R.string.toast_file_exists,
+        action: (String?) -> Unit
+    ) {
+        val editText = EditText(context).apply { setText(path.substringAfterLast("/")) }
+        AlertDialog.Builder(context)
+            .setView(editText)
+            .setPositiveButton(R.string.dialog_file_rename_positive_button, null)
+            .setNegativeButton(R.string.dialog_file_rename_negative_button) { dialog, _ -> dialog.cancel() }
+            .create()
+            .apply {
+                setOnShowListener {
+                    getButton(DialogInterface.BUTTON_POSITIVE)?.setOnClickListener {
+                        val name = editText.text?.toString()
+                        if (name.isNullOrBlank()) return@setOnClickListener
+                        val file = File(path, name)
+                        if (file.exists()) {
+                            Toast.makeText(context, onExistMessage, Toast.LENGTH_SHORT)
+                                .apply { setGravity(Gravity.CENTER, 0, 0) }
+                                .show()
+                            return@setOnClickListener
+                        }
+                        dismiss()
+                        action(editText.text?.toString())
+                    }
+                    editText.edit()
+                }
+            }
+            .show()
     }
 
     private fun createFileDialog(
@@ -179,15 +222,13 @@ class OperationsManager(private val context: Context) {
         AlertDialog.Builder(context)
             .setView(editText)
             .setPositiveButton(R.string.dialog_file_create_positive_button, null)
-            .setNegativeButton(R.string.dialog_file_create_negative_button) { dialog, _ ->
-                dialog.cancel()
-            }
+            .setNegativeButton(R.string.dialog_file_create_negative_button) { dialog, _ -> dialog.cancel() }
             .create()
             .apply {
                 setOnShowListener {
                     getButton(DialogInterface.BUTTON_POSITIVE)?.setOnClickListener {
-                        val name = editText.text?.toString() ?: return@setOnClickListener
-                        if (name.isBlank()) return@setOnClickListener
+                        val name = editText.text?.toString()
+                        if (name.isNullOrBlank()) return@setOnClickListener
                         val file = File(path, name)
                         if (file.exists()) {
                             Toast.makeText(context, onExistMessage, Toast.LENGTH_SHORT)
@@ -198,6 +239,7 @@ class OperationsManager(private val context: Context) {
                         dismiss()
                         action(editText.text?.toString())
                     }
+                    editText.edit()
                 }
             }
             .show()
@@ -221,28 +263,36 @@ class OperationsManager(private val context: Context) {
             .show()
     }
 
-    fun fileExistsDialog(name: String?): Deferred<String?> {
-        val cont = CompletableDeferred<String?>()
-        val editText = EditText(context).apply { setText(name) }
-        AlertDialog.Builder(context)
-            .setMessage(R.string.dialog_file_exists_message)
-            .setView(editText)
-            .setPositiveButton(R.string.dialog_file_exists_positive_button) { dialog, _ ->
-                dialog.dismiss()
-                cont.complete(editText.text?.toString())
-            }
-            .setNegativeButton(R.string.dialog_file_exists_negative_button) { dialog, _ ->
-                dialog.cancel()
-                cont.complete(null)
-            }
-            .setOnDismissListener {
-                imm?.hideSoftInputFromWindow(
-                    editText.windowToken,
-                    InputMethodManager.HIDE_IMPLICIT_ONLY
-                )
-            }
-            .show()
-        return cont
+    private suspend fun fileExistsDialog(name: String?): String? = suspendCoroutine { cont ->
+        CoroutineScope(Dispatchers.Main).safeLaunch {
+            val editText = EditText(context).apply { setText(name) }
+            AlertDialog.Builder(context)
+                .setMessage(R.string.dialog_file_exists_message)
+                .setView(editText)
+                .setPositiveButton(R.string.dialog_file_exists_positive_button) { dialog, _ ->
+                    dialog.dismiss()
+                    cont.resume(editText.text?.toString())
+                }
+                .setNegativeButton(R.string.dialog_file_exists_negative_button) { dialog, _ ->
+                    dialog.cancel()
+                }
+                .setOnCancelListener {
+                    cont.resume(null)
+                }
+                .setOnDismissListener {
+                    imm?.hideSoftInputFromWindow(
+                        editText.windowToken,
+                        InputMethodManager.HIDE_IMPLICIT_ONLY
+                    )
+                }
+                .create()
+                .apply {
+                    setOnShowListener {
+                        editText.edit()
+                    }
+                }
+                .show()
+        }
     }
 
 }

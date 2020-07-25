@@ -1,9 +1,12 @@
 package com.dm6801.filemanager
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
+import android.util.Size
 import android.view.*
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.*
@@ -12,7 +15,6 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.dm6801.filemanager.contains
 import com.dm6801.filemanager.operations.Copy
 import com.dm6801.filemanager.operations.Move
 import com.dm6801.filemanager.operations.OperationsManager
@@ -22,14 +24,19 @@ import kotlinx.android.synthetic.main.item_file.view.*
 import kotlinx.coroutines.*
 import java.io.File
 import java.lang.ref.WeakReference
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.properties.Delegates
 
 class PathsAdapter(private val operations: OperationsManager) :
-    ListAdapter<PathsAdapter.Item, PathsAdapter.ViewHolder<PathsAdapter.Item>>(diffUtil) {
+    ListAdapter<PathsAdapter.Item, PathsAdapter.ViewHolder<PathsAdapter.Item>>(
+        diffUtil
+    ) {
 
     companion object {
         const val KEY_UPDATE_IS_SELECTED = "KEY_UPDATE_IS_SELECTED"
+        val SEPARATOR = File.separatorChar
+        private val THUMBNAIL_WIDTH = 128
+        private val THUMBNAIL_HEIGHT = 128
+
         private val diffUtil = object : DiffUtil.ItemCallback<Item>() {
             override fun areItemsTheSame(oldItem: Item, newItem: Item): Boolean {
                 return oldItem.path == newItem.path
@@ -49,16 +56,24 @@ class PathsAdapter(private val operations: OperationsManager) :
         }
     }
 
-    var rootPath: String? = null
+    var rootPath: String? = null; private set
     val selected get() = currentList.filter { it is Item.Entry && it.isSelected }
     private val isAnySelected: Boolean get() = currentList.any { it is Item.Entry && it.isSelected }
 
-    private var observers: MutableList<Observer<List<Item>>> = mutableListOf()
+    private var selectionObservers: MutableList<Observer<List<Item>>> = mutableListOf()
     private var onSelectionUpdate: List<Item> by Delegates.observable(emptyList()) { _, _, newValue ->
-        observers.forEach { it.onChanged(newValue) }
+        selectionObservers.forEach { it.onChanged(newValue) }
+    }
+
+    private var pathObservers: MutableList<Observer<String?>> = mutableListOf()
+    private var onPathChanged: String? by Delegates.observable<String?>(null) { _, _, newValue ->
+        pathObservers.forEach { it.onChanged(newValue) }
     }
 
     private var queueAdapter: QueueAdapter? = null
+
+    private val bitmapCache: MutableMap<String, Bitmap> = mutableMapOf()
+    private var displayFullPath: Boolean = false
 
     init {
         operations.observe(Observer {
@@ -70,8 +85,13 @@ class PathsAdapter(private val operations: OperationsManager) :
         })
     }
 
-    fun observe(observer: Observer<List<Item>>): PathsAdapter {
-        observers.add(observer)
+    fun onSelected(observer: Observer<List<Item>>): PathsAdapter {
+        selectionObservers.add(observer)
+        return this
+    }
+
+    fun onPathChanged(observer: Observer<String?>): PathsAdapter {
+        pathObservers.add(observer)
         return this
     }
 
@@ -84,20 +104,31 @@ class PathsAdapter(private val operations: OperationsManager) :
         try {
             if (!file.isDirectory || !file.canRead()) return
             this.rootPath = path
-            submitList(file.listFiles()?.map { it.absolutePath })
+            CoroutineScope(Dispatchers.IO).launch {
+                launch { clearCache() }
+                val files = file.listFiles()
+                val sorted = files
+                    ?.sortedWith(compareBy({ !it.isDirectory }, { it.absolutePath }))
+                    ?.map { it.absolutePath }
+                submitList(sorted) {
+                    onPathChanged = path
+                }
+            }
         } catch (t: Throwable) {
             t.printStackTrace()
         }
     }
 
     @Suppress("UNUSED_PARAMETER", "UNCHECKED_CAST")
-    fun submitList(paths: List<String>?, a: Boolean = false) {
+    fun submitList(paths: List<String>?, a: Boolean = false, callback: () -> Unit) {
         val list = paths?.map { Item.Entry(it) } ?: emptyList()
-        submitList(listOf(backButtonDir()) + list)
+        submitList(listOf(backButtonDir()) + list, callback)
     }
 
     private fun backButtonDir(): Item.Back {
-        return rootPath?.substringBeforeLast("/")?.let { Item.Back(it) } ?: Item.Back("..")
+        return rootPath?.substringBeforeLast("/")
+            ?.let { Item.Back(it) }
+            ?: Item.Back("..")
     }
 
     fun refresh() = CoroutineScope(Dispatchers.Main).launch {
@@ -116,9 +147,9 @@ class PathsAdapter(private val operations: OperationsManager) :
 
     fun select(rect: Rect) {
         val childrenPositions = getVisibleChildrenRange()
-        val children =
-            childrenPositions?.mapNotNull { recyclerView?.findViewHolderForAdapterPosition(it)?.itemView }
-                ?: emptyList()
+        val children = childrenPositions
+            ?.mapNotNull { recyclerView?.findViewHolderForAdapterPosition(it)?.itemView }
+            ?: emptyList()
         var first = -1
         var last = -1
         var index = 0
@@ -132,15 +163,17 @@ class PathsAdapter(private val operations: OperationsManager) :
             }
             index += 1
         }
-        if (first == -1 || last < first) return
+        if (first == -1) return
+        if (last == -1) last = first
+        if (last < first) return
         select(first..last)
     }
 
     private fun select(range: IntRange) {
-        for (position in range) {
-            (getItem(position) as? Item.Entry)?.isSelected = true
+        for (position in 0..currentList.lastIndex) {
+            (getItem(position) as? Item.Entry)?.isSelected = position in range
         }
-        notifyItemRangeChanged(range.first, range.count())
+        notifyDataSetChanged()
         onSelectionUpdate = selected
     }
 
@@ -163,7 +196,7 @@ class PathsAdapter(private val operations: OperationsManager) :
         }
         withContext(Dispatchers.Main) {
             submitList(updated)
-            onSelectionUpdate = selected
+            onSelectionUpdate = emptyList()
         }
     }
 
@@ -185,45 +218,52 @@ class PathsAdapter(private val operations: OperationsManager) :
         parent?.addView(anchor)
         anchor.x = point.first
         anchor.y = point.second
-        PopupMenu(view.context, anchor)
-            .apply {
-                inflate(R.menu.actions)
-                menu.findItem(R.id.menu_actions_paste).isVisible =
-                    operations.peek()?.let { it is Copy || it is Move } == true
-                menu.findItem(R.id.menu_actions_deselect).isVisible = isAnySelected
-                menu.findItem(R.id.menu_actions_clear).isVisible = operations.size != 0
-                setOnMenuItemClickListener { menuItem ->
-                    when (menuItem.itemId) {
-                        R.id.menu_actions_paste -> {
-                            executeQueue()
-                            true
-                        }
-                        R.id.menu_actions_create -> {
-                            createFile()
-                            true
-                        }
-                        R.id.menu_actions_deselect -> {
-                            clearSelection()
-                            true
-                        }
-                        R.id.menu_actions_clear -> {
-                            clearQueue()
-                            true
-                        }
-                        R.id.menu_actions_refresh -> {
-                            refresh()
-                            true
-                        }
-                        else -> null
-                    } ?: false
-                }
-                setOnDismissListener { parent?.removeView(anchor) }
-                show()
+        PopupMenu(view.context, anchor).apply {
+            inflate(R.menu.actions)
+            menu.findItem(R.id.menu_actions_paste).isVisible =
+                operations.peek()?.let { it is Copy || it is Move } == true
+            menu.findItem(R.id.menu_actions_deselect).isVisible = isAnySelected
+            menu.findItem(R.id.menu_actions_clear).isVisible = operations.size != 0
+            setOnMenuItemClickListener { menuItem ->
+                when (menuItem.itemId) {
+                    R.id.menu_actions_paste -> {
+                        executeQueue()
+                        true
+                    }
+                    R.id.menu_actions_create -> {
+                        createFile()
+                        true
+                    }
+                    R.id.menu_actions_deselect -> {
+                        clearSelection()
+                        true
+                    }
+                    R.id.menu_actions_clear -> {
+                        clearQueue()
+                        true
+                    }
+                    R.id.menu_actions_refresh -> {
+                        refresh()
+                        true
+                    }
+                    else -> null
+                } ?: false
             }
+            setOnDismissListener { parent?.removeView(anchor) }
+            show()
+        }
     }
 
-    fun openFile() {
-        operations.openFile(selected.firstOrNull()?.path ?: return)
+    fun openFile(path: String? = selected.firstOrNull()?.path) {
+        val file = File(path ?: return)
+        when {
+            file.isDirectory -> openDirectory(path)
+            file.isFile -> operations.openFile(path)
+        }
+    }
+
+    fun rename() {
+        operations.rename(selected.firstOrNull()?.path ?: return)
     }
 
     fun createFile() {
@@ -268,14 +308,15 @@ class PathsAdapter(private val operations: OperationsManager) :
     @Suppress("UNCHECKED_CAST")
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder<Item> {
         return when (viewType) {
-            Item.Back.viewType ->
-                BackViewHolder(inflate(parent, R.layout.item_back))
-            FileType.Directory.ordinal ->
-                DirectoryViewHolder(inflate(parent, R.layout.item_directory))
-            FileType.File.ordinal ->
-                FileViewHolder(inflate(parent, R.layout.item_file))
-            else ->
-                ErrorViewHolder(inflate(parent, R.layout.item_error))
+            Item.Back.viewType -> BackViewHolder(inflate(parent, R.layout.item_back))
+            FileType.Directory.ordinal -> DirectoryViewHolder(
+                inflate(
+                    parent,
+                    R.layout.item_directory
+                )
+            )
+            FileType.File.ordinal -> FileViewHolder(inflate(parent, R.layout.item_file))
+            else -> ErrorViewHolder(inflate(parent, R.layout.item_error))
         } as ViewHolder<Item>
     }
 
@@ -294,8 +335,7 @@ class PathsAdapter(private val operations: OperationsManager) :
     ) {
         super.onBindViewHolder(holder, position, payloads)
         if (payloads.contains(KEY_UPDATE_IS_SELECTED))
-            getItemTyped<Item.Entry>(position)
-                ?.isSelected?.let { holder.isSelected = it }
+            getItemTyped<Item.Entry>(position)?.isSelected?.let { holder.isSelected = it }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -318,14 +358,16 @@ class PathsAdapter(private val operations: OperationsManager) :
             var isSelected: Boolean
         ) : Item(path) {
             constructor(file: File) : this(file.absolutePath, getType(file), false)
+
             constructor(path: String) : this(File(path))
 
             val file by lazy { File(path) }
-            val files: List<File>? = try {
-                file.listFiles()?.toList()
-            } catch (t: Throwable) {
-                null
-            }
+            val files: List<File>? =
+                try {
+                    file.listFiles()?.toList()
+                } catch (t: Throwable) {
+                    null
+                }
 
             companion object {
                 fun getType(file: File): FileType {
@@ -401,19 +443,27 @@ class PathsAdapter(private val operations: OperationsManager) :
     }
 
     inner class DirectoryViewHolder(itemView: View) : ViewHolder<Item.Entry>(itemView) {
+        private val imageView: ImageView? get() = itemView.item_directory_icon
         private val pathText: TextView? get() = itemView.item_directory_path
         private val descriptionText: TextView? get() = itemView.item_directory_description
 
-        @SuppressLint("SetTextI18n")
         override fun bind(item: Item.Entry) {
             super.bind(item)
-            pathText?.text = item.path
-            val filesSize = item.files?.size ?: -1
-            if (filesSize > 0) {
+            imageView?.setImageResource(R.drawable.folder)
+            setText(item.path, item.files)
+        }
+
+        @SuppressLint("SetTextI18n")
+        private fun setText(path: String, files: List<File>?) {
+            pathText?.text =
+                if (displayFullPath) path
+                else path.substringAfterLast(SEPARATOR)
+            val numberOfFiles = files?.size ?: -1
+            if (numberOfFiles > 0) {
                 descriptionText?.text = "       ${itemView.context.resources.getQuantityString(
                     R.plurals.files,
-                    filesSize,
-                    filesSize
+                    numberOfFiles,
+                    numberOfFiles
                 )}"
                 descriptionText?.isVisible = true
             } else {
@@ -437,11 +487,73 @@ class PathsAdapter(private val operations: OperationsManager) :
         }
     }
 
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView)
+        clearCache()
+    }
+
+    override fun onViewRecycled(holder: ViewHolder<Item>) {
+        super.onViewRecycled(holder)
+        (holder as? FileViewHolder)?.recycle()
+    }
+
+    private fun clearCache() {
+        val values = bitmapCache.values
+        bitmapCache.clear()
+        values.forEach(Bitmap::recycle)
+    }
+
     inner class FileViewHolder(itemView: View) : ViewHolder<Item.Entry>(itemView) {
+        private val imageView: ImageView? get() = itemView.item_file_icon
         private val pathText: TextView? get() = itemView.item_file_path
+
         override fun bind(item: Item.Entry) {
             super.bind(item)
-            pathText?.text = item.path
+            setText(item.path)
+            setImage(item.path)
+        }
+
+        private fun setText(path: String) {
+            pathText?.text =
+                if (displayFullPath) path
+                else path.substringAfterLast(SEPARATOR)
+        }
+
+        private fun setImage(path: String) {
+            bitmapCache[path]?.run {
+                imageView?.setImageBitmap(this)
+                return
+            }
+            CoroutineScope(Dispatchers.IO).launch {
+                val mimeType = getMimeType(path, recyclerView?.context)
+                val file = File(path)
+                val thumbnail = when {
+                    mimeType != null -> extractThumbnail(path, mimeType)
+                    file.isImage() -> extractThumbnail(path, "image/*")
+                    file.isVideo() -> extractThumbnail(path, "video/*")
+                    file.isAudio() -> extractThumbnail(path, "audio/*")
+                    else -> null
+                }
+                withContext(Dispatchers.Main) {
+                    thumbnail?.let { imageView?.setImageBitmap(it) }
+                        ?: imageView?.setImageResource(R.drawable.file)
+                }
+            }
+        }
+
+        @Suppress("DEPRECATION")
+        private suspend fun extractThumbnail(path: String, mimeType: String): Bitmap? {
+            return if (mimeType.startsWith("image") ||
+                mimeType.startsWith("video") ||
+                mimeType.startsWith("audio")
+            ) withContext(Dispatchers.IO) {
+                ThumbnailUtils.extractThumbnail(
+                    File(path),
+                    mimeType,
+                    Size(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
+                )?.also { bitmapCache[path] = it }
+            }
+            else null
         }
 
         override fun createGestureListener(item: Item.Entry): GestureListener {
@@ -457,35 +569,42 @@ class PathsAdapter(private val operations: OperationsManager) :
                 }
             }
         }
+
+        fun recycle() {
+            imageView?.setImageDrawable(null)
+        }
     }
 
     private fun popupItemMenu(itemView: View, item: Item.Entry) {
-        PopupMenu(itemView.context, itemView)
-            .apply {
-                inflate(R.menu.item)
-                setOnMenuItemClickListener { menuItem ->
-                    when (menuItem.itemId) {
-                        R.id.menu_file_open -> {
-                            operations.openFile(item.path)
-                            true
-                        }
-                        R.id.menu_file_copy -> {
-                            operations.copy(item.path)
-                            true
-                        }
-                        R.id.menu_file_move -> {
-                            operations.move(item.path)
-                            true
-                        }
-                        R.id.menu_file_delete -> {
-                            operations.delete(item.path)
-                            true
-                        }
-                        else -> null
-                    } ?: false
-                }
-                show()
+        PopupMenu(itemView.context, itemView).apply {
+            inflate(R.menu.item)
+            setOnMenuItemClickListener { menuItem ->
+                when (menuItem.itemId) {
+                    R.id.menu_file_open -> {
+                        openFile(item.path)
+                        true
+                    }
+                    R.id.menu_file_rename -> {
+                        operations.rename(item.path)
+                        true
+                    }
+                    R.id.menu_file_copy -> {
+                        operations.copy(item.path)
+                        true
+                    }
+                    R.id.menu_file_move -> {
+                        operations.move(item.path)
+                        true
+                    }
+                    R.id.menu_file_delete -> {
+                        operations.delete(item.path)
+                        true
+                    }
+                    else -> null
+                } ?: false
             }
+            show()
+        }
     }
 
     inner class ErrorViewHolder(itemView: View) : ViewHolder<Item.Entry>(itemView) {

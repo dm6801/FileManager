@@ -6,6 +6,9 @@
         android:id="@+id/menu_file_open"
         android:title="open" />
     <item
+        android:id="@+id/menu_file_rename"
+        android:title="rename" />
+    <item
         android:id="@+id/menu_file_copy"
         android:title="copy" />
     <item

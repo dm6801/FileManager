@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -29,6 +30,7 @@ class FileManagerView @JvmOverloads constructor(
         val TAG = this::class.java.enclosingClass?.simpleName!!
     }
 
+    private val pathText: TextView? get() = file_manager_path_text
     private val pathsRecycler: RecyclerView? get() = file_manager_recycler
     private val queueRecycler: RecyclerView? get() = file_manager_queue_recycler
     private val rectSelectView: RectangleSelectionView? get() = file_manager_rectangle_selection
@@ -36,6 +38,7 @@ class FileManagerView @JvmOverloads constructor(
     private val menuButton: ImageView? get() = file_manager_menu_button
     private val menuView: LinearLayout? get() = file_manager_menu
     private val openButton: Button? get() = file_manager_menu_open
+    private val renameButton: Button? get() = file_manager_menu_rename
     private val deleteButton: Button? get() = file_manager_menu_delete
     private val folderButton: Button? get() = file_manager_menu_folder
     private val createButton: Button? get() = file_manager_menu_create
@@ -48,7 +51,9 @@ class FileManagerView @JvmOverloads constructor(
     private val refreshButton: Button? get() = file_manager_menu_refresh
 
     private val operations = OperationsManager(context)
-    private val pathsAdapter = PathsAdapter(operations).observe(Observer(::onSelected))
+    private val pathsAdapter = PathsAdapter(operations)
+        .onPathChanged(Observer(::onPathChanged))
+        .onSelected(Observer(::onSelected))
     private val queueAdapter = QueueAdapter(operations)
 
     init {
@@ -99,6 +104,7 @@ class FileManagerView @JvmOverloads constructor(
         }
         refreshMenuButtons()
         openButton?.setOnClickListener { pathsAdapter.openFile() }
+        renameButton?.setOnClickListener { pathsAdapter.rename() }
         deleteButton?.setOnClickListener { pathsAdapter.deleteFiles() }
         createButton?.setOnClickListener { pathsAdapter.createFile() }
         folderButton?.setOnClickListener { pathsAdapter.createFolder() }
@@ -122,6 +128,7 @@ class FileManagerView @JvmOverloads constructor(
         when {
             selectedSize <= 0 -> {
                 openButton?.disable()
+                renameButton?.disable()
                 deleteButton?.disable()
                 createButton?.enable()
                 copyButton?.disable()
@@ -131,6 +138,7 @@ class FileManagerView @JvmOverloads constructor(
             }
             selectedSize == 1 -> {
                 openButton?.enable()
+                renameButton?.enable()
                 deleteButton?.enable()
                 createButton?.enable()
                 copyButton?.enable()
@@ -140,6 +148,7 @@ class FileManagerView @JvmOverloads constructor(
             }
             selectedSize > 1 -> {
                 openButton?.disable()
+                renameButton?.disable()
                 deleteButton?.enable()
                 createButton?.enable()
                 copyButton?.enable()
@@ -212,6 +221,10 @@ class FileManagerView @JvmOverloads constructor(
     private fun linkAdapters() {
         pathsAdapter.link(queueAdapter)
         queueAdapter.link(pathsAdapter)
+    }
+
+    private fun onPathChanged(path: String?) {
+        pathText?.text = path
     }
 
     private fun onSelected(selected: List<PathsAdapter.Item>?) {

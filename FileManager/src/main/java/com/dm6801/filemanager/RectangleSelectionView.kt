@@ -134,6 +134,11 @@ class RectangleSelectionView @JvmOverloads constructor(
     fun onActionUp(ev: MotionEvent?): Boolean {
         ev ?: return false
         Log.d(TAG, "MotionEvent.ACTION_UP\t$this")
+        if (ev.x == x1 && ev.y == y1) {
+            reset()
+            invalidate()
+            return false
+        }
         x2 = ev.x
         y2 = ev.y
         invalidate()
