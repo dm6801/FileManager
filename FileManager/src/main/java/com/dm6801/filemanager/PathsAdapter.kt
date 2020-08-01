@@ -9,6 +9,7 @@ import android.util.Size
 import android.view.*
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -325,6 +326,47 @@ class PathsAdapter(private val operations: OperationsManager) :
         if (file.isFile) operations.openFileWith(path)
     }
 
+    @Suppress("UNCHECKED_CAST")
+    fun fileProperties(path: String? = selected.firstOrNull()?.path) {
+        val context = recyclerView?.context ?: return
+        val file = File(path ?: return)
+        val details = StringBuilder("path: $path\n")
+        val metadata = file.getMetaData()
+        val attributes = file.getAttributes()
+        attributes
+            ?.let {
+                metadata?.plus(it)
+                    ?: it.plus("mimetype" to MimeType.analyze(path))
+            }
+            ?.toSortedMap(
+                compareBy<String>(
+                    { if ("mimetype" == it) 0 else 1 },
+                    { if ("size" == it) 0 else 1 },
+                    {
+                        if (metadata?.containsKey(it) == true) {
+                            if (!it.contains('_')) 0 else 1
+                        } else 2
+                    }
+                ).then(naturalOrder())
+            )
+            ?.toList()
+            ?.joinToString("\n") { pair ->
+                "${pair.first}: ${when (pair.first) {
+                    "size" ->
+                        pair.second?.toLongOrNull()?.let { formatSize(context, it) } ?: pair.second
+                    "duration" -> pair.second?.toLongOrNull()?.let(::formatDuration) ?: pair.second
+                    else -> pair.second
+                }}"
+            }?.plus("\n")
+            ?.let(details::append)
+        AlertDialog.Builder(context)
+            .setMessage(details.toString())
+            .setPositiveButton(R.string.dialog_file_details_positive_button) { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
+    }
+
     fun rename() {
         operations.rename(selected.firstOrNull()?.path ?: return)
     }
@@ -544,7 +586,9 @@ class PathsAdapter(private val operations: OperationsManager) :
 
         override fun onClick() {
             super.onClick()
-            popupItemMenu(itemView, getItemTyped(adapterPosition) ?: return)
+            val selected = getItemTyped<Item.Entry>(adapterPosition) ?: return
+            if (selected !in this@PathsAdapter.selected) select(adapterPosition..adapterPosition)
+            popupItemMenu(itemView, selected)
         }
 
         override fun onDoubleClick() {
@@ -608,7 +652,9 @@ class PathsAdapter(private val operations: OperationsManager) :
 
         override fun onClick() {
             super.onClick()
-            popupItemMenu(itemView, getItemTyped(adapterPosition) ?: return)
+            val selected = getItemTyped<Item.Entry>(adapterPosition) ?: return
+            if (selected !in this@PathsAdapter.selected) select(adapterPosition..adapterPosition)
+            popupItemMenu(itemView, selected)
         }
 
         override fun onDoubleClick() {
@@ -628,7 +674,15 @@ class PathsAdapter(private val operations: OperationsManager) :
         menu?.menu?.close()
         menu = PopupMenu(itemView.context, itemView).apply {
             inflate(R.menu.item)
-            menu.findItem(R.id.menu_file_open_with)?.isVisible = item.file.isFile
+            val itemCount = selected.size
+            if (itemCount > 1) {
+                menu.findItem(R.id.menu_file_open)?.isVisible = false
+                menu.findItem(R.id.menu_file_open_with)?.isVisible = false
+                menu.findItem(R.id.menu_file_rename)?.isVisible = false
+                menu.findItem(R.id.menu_file_properties)?.isVisible = false
+            } else {
+                menu.findItem(R.id.menu_file_open_with)?.isVisible = item.file.isFile
+            }
             setOnMenuItemClickListener { menuItem ->
                 when (menuItem.itemId) {
                     R.id.menu_file_open -> {
@@ -644,15 +698,22 @@ class PathsAdapter(private val operations: OperationsManager) :
                         true
                     }
                     R.id.menu_file_copy -> {
-                        operations.copy(item.path)
+                        if (itemCount <= 1) operations.copy(item.path)
+                        else operations.copy(selected.map { it.path })
                         true
                     }
                     R.id.menu_file_move -> {
-                        operations.move(item.path)
+                        if (itemCount == 1) operations.move(item.path)
+                        else operations.move(selected.map { it.path })
                         true
                     }
                     R.id.menu_file_delete -> {
-                        operations.delete(item.path)
+                        if (itemCount == 1) operations.delete(item.path)
+                        else operations.delete(selected.map { it.path })
+                        true
+                    }
+                    R.id.menu_file_properties -> {
+                        fileProperties(item.path)
                         true
                     }
                     else -> null

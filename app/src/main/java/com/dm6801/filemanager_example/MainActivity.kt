@@ -2,10 +2,7 @@ package com.dm6801.filemanager_example
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import androidx.lifecycle.lifecycleScope
-import com.dm6801.filemanager.FileInfo
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -18,18 +15,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun initDebugButton() {
         debug_button?.setOnClickListener {
-            initFileManager()
-            /*try {
-                lifecycleScope.launch {
-                    FileInfo.getDirectoryInfo(filesDir.absolutePath ?: return@launch).await()
-                }
-            } catch (t: Throwable) {
-                t.printStackTrace()
-            }*/
+            //initFileManager()
         }
     }
 
     private fun initFileManager() {
+        file_manager_view?.settings(
+            sideMenu = true,
+            popupMenu = true
+        )
         file_manager_view?.openDirectory(filesDir?.parent ?: return)
     }
 

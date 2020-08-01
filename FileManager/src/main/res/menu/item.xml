@@ -20,4 +20,7 @@
     <item
         android:id="@+id/menu_file_delete"
         android:title="delete" />
+    <item
+        android:id="@+id/menu_file_properties"
+        android:title="properties" />
 </menu>

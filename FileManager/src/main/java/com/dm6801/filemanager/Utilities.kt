@@ -4,7 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Rect
+import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
+import android.text.format.Formatter
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.webkit.MimeTypeMap
@@ -13,7 +16,12 @@ import androidx.core.content.getSystemService
 import androidx.core.view.isVisible
 import kotlinx.coroutines.*
 import java.io.File
+import java.lang.reflect.Field
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFileAttributeView
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.ExperimentalTime
+import kotlin.time.milliseconds
 
 internal fun <T> List<T>.mutate(action: MutableList<T>.() -> Unit): List<T> {
     return try {
@@ -56,6 +64,13 @@ fun getMimeType(path: String, context: Context? = null): String? {
     return MimeType.analyze(path)
 }
 
+fun String.extension(): String? {
+    val separatorIndex = indexOfLast { it == '/' }.coerceAtLeast(0)
+    val dotIndex = indexOf('.', separatorIndex)
+    if (dotIndex == -1 || dotIndex + 1 >= length - 1) return null
+    return substring(dotIndex + 1)
+}
+
 fun File.isImage(): Boolean {
     return try {
         inputStream().use {
@@ -69,12 +84,88 @@ fun File.isImage(): Boolean {
     }
 }
 
-fun File.isVideo(): Boolean {
+fun File.isVideo(): Boolean { //TODO
     return name.endsWith(".mp4") || name.endsWith(".mkv")
 }
 
-fun File.isAudio(): Boolean {
+fun File.isAudio(): Boolean { //TODO
     return name.endsWith(".mp3")
+}
+
+@SuppressLint("DefaultLocale")
+fun File.getMetaData(hideEmpty: Boolean = true): Map<String, String?>? {
+    return try {
+        val mmr = MediaMetadataRetriever()
+            .apply { setDataSource(absolutePath) }
+        MediaMetadataRetriever::class.java.declaredFields.mapNotNull {
+            try {
+                it.isAccessible = true
+                val value: String? = mmr.extractMetadata(it.getInt(mmr))
+                if (value == null && hideEmpty) null
+                else it.name.substringAfter("KEY_").toLowerCase() to value
+            } catch (_: Throwable) {
+                null
+            }
+        }.toMap()
+    } catch (_: Throwable) {
+        null
+    }
+}
+
+@SuppressLint("DefaultLocale")
+@Suppress("UNCHECKED_CAST")
+fun File.getAttributes(hideEmpty: Boolean = true): Map<String, String?>? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+    return try {
+        val attrsView = Files.getFileAttributeView(toPath(), PosixFileAttributeView::class.java)
+        val attrs = attrsView.readAttributes()
+        (attrsView.getField("posixAttributeNames") as? Set<String>)
+            ?.mapNotNull {
+                val value = (attrs.invoke(it) ?: attrs.getField(it))?.toString()
+                if (value == null && hideEmpty) null
+                else it to value
+            }?.toMap()
+    } catch (_: Throwable) {
+        null
+    }
+}
+
+@SuppressLint("DefaultLocale")
+private fun Any.invoke(name: String, vararg args: Any): Any? {
+    return try {
+        this.javaClass.declaredMethods.find {
+            it.name.toLowerCase().contains(name.toLowerCase())
+        }?.run {
+            isAccessible = true
+            if (this.parameterTypes.isNotEmpty())
+                invoke(this@invoke, args)
+            else
+                invoke(this@invoke)
+        }
+    } catch (_: Throwable) {
+    }
+}
+
+@SuppressLint("DefaultLocale")
+private fun Any.getField(name: String): Any? {
+    return try {
+        this.javaClass.declaredFields.find {
+            it.name.toLowerCase().contains(name.toLowerCase())
+        }?.run {
+            isAccessible = true
+            get(this@getField)
+        }
+    } catch (_: Throwable) {
+    }
+}
+
+@OptIn(ExperimentalTime::class)
+fun formatDuration(ms: Long): String {
+    return ms.milliseconds.toString()
+}
+
+fun formatSize(context: Context?, sizeBytes: Long): String {
+    return Formatter.formatFileSize(context, sizeBytes)
 }
 
 private val Context.imm: InputMethodManager? get() = getSystemService()
